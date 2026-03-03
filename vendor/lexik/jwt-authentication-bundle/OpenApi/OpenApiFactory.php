@@ -19,14 +19,10 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class OpenApiFactory implements OpenApiFactoryInterface
 {
-    /**
-     * @var OpenApiFactoryInterface
-     */
-    private $decorated;
-
-    private $checkPath;
-    private $usernamePath;
-    private $passwordPath;
+    private OpenApiFactoryInterface $decorated;
+    private string $checkPath;
+    private string $usernamePath;
+    private string $passwordPath;
 
     public function __construct(OpenApiFactoryInterface $decorated, string $checkPath, string $usernamePath, string $passwordPath)
     {
@@ -42,6 +38,18 @@ class OpenApiFactory implements OpenApiFactoryInterface
     public function __invoke(array $context = []): OpenApi
     {
         $openApi = ($this->decorated)($context);
+
+        $openApi
+            ->getComponents()->getSecuritySchemes()->offsetSet(
+                'JWT',
+                new \ArrayObject(
+                    [
+                        'type' => 'http',
+                        'scheme' => 'bearer',
+                        'bearerFormat' => 'JWT',
+                    ]
+                )
+            );
 
         $openApi
             ->getPaths()
@@ -70,15 +78,16 @@ class OpenApiFactory implements OpenApiFactoryInterface
                     ],
                 ])
                 ->withSummary('Creates a user token.')
+                ->withDescription('Creates a user token.')
                 ->withRequestBody(
                     (new RequestBody())
                     ->withDescription('The login data')
                     ->withContent(new \ArrayObject([
-                        'application/json' => new MediaType(new \ArrayObject(new \ArrayObject([
+                        'application/json' => new MediaType(new \ArrayObject([
                             'type' => 'object',
                             'properties' => $properties = array_merge_recursive($this->getJsonSchemaFromPathParts(explode('.', $this->usernamePath)), $this->getJsonSchemaFromPathParts(explode('.', $this->passwordPath))),
                             'required' => array_keys($properties),
-                        ]))),
+                        ])),
                     ]))
                     ->withRequired(true)
                 )

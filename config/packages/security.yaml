@@ -1,37 +1,53 @@
 security:
-    # https://symfony.com/doc/current/security.html#registering-the-user-hashing-passwords
+    # 1. Hachage des mots de passe (On ne touche pas, c'est très bien)
     password_hashers:
         Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface: 'auto'
 
-    # https://symfony.com/doc/current/security.html#loading-the-user-the-user-provider
+    # 2. Fournisseurs d'utilisateurs : On dit à Symfony de chercher dans la table Admin
     providers:
-        users_in_memory: { memory: null }
+        app_admin_provider:
+            entity:
+                class: App\Entity\Admin
+                property: identifiant # ⚠️ Symfony va utiliser l'identifiant pour connecter l'admin
 
+    # 3. Les pare-feux (Videurs de boîte de nuit)
     firewalls:
         dev:
-            # Ensure dev tools and static assets are always allowed
-            pattern: ^/(_profiler|_wdt|assets|build)/
+            pattern: ^/(_(profiler|wdt)|css|images|js)/
             security: false
+
+        # A. La porte pour se connecter et récupérer le Token (passeport)
+        login:
+            pattern: ^/api/login
+            stateless: true
+            provider: app_admin_provider
+            json_login:
+                check_path: /api/login_check
+                success_handler: lexik_jwt_authentication.handler.authentication_success
+                failure_handler: lexik_jwt_authentication.handler.authentication_failure
+
+        # B. La porte pour lire/modifier l'API (nécessite le Token)
+        api:
+            pattern:   ^/api
+            stateless: true
+            provider: app_admin_provider
+            jwt: ~
+
+        # C. (Défaut)
         main:
             lazy: true
-            provider: users_in_memory
+            provider: app_admin_provider
 
-            # Activate different ways to authenticate:
-            # https://symfony.com/doc/current/security.html#the-firewall
-
-            # https://symfony.com/doc/current/security/impersonating_user.html
-            # switch_user: true
-
-    # Note: Only the *first* matching rule is applied
+    # 4. Contrôle d'accès (Qui a le droit d'aller où ?)
     access_control:
-        # - { path: ^/admin, roles: ROLE_ADMIN }
-        # - { path: ^/profile, roles: ROLE_USER }
+        # On autorise tout le monde à essayer de se connecter
+        - { path: ^/api/login, roles: PUBLIC_ACCESS }
+        # On bloque tout le reste de l'API : il faut être connecté avec un Token valide
+        - { path: ^/api,       roles: IS_AUTHENTICATED_FULLY }
 
 when@test:
     security:
         password_hashers:
-            # Password hashers are resource-intensive by design to ensure security.
-            # In tests, it's safe to reduce their cost to improve performance.
             Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface:
                 algorithm: auto
                 cost: 4 # Lowest possible value for bcrypt

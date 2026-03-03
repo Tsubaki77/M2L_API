@@ -12,7 +12,7 @@
 namespace Symfony\Component\Config\Resource;
 
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
-use Symfony\Component\Messenger\Handler\MessageSubscriberInterface;
+use Symfony\Component\Form\FormTypeExtensionInterface;
 use Symfony\Contracts\Service\ServiceSubscriberInterface;
 
 /**
@@ -24,14 +24,14 @@ class ReflectionClassResource implements SelfCheckingResourceInterface
 {
     private array $files = [];
     private string $className;
-    private \ReflectionClass $classReflector;
     private array $excludedVendors = [];
     private string $hash;
 
-    public function __construct(\ReflectionClass $classReflector, array $excludedVendors = [])
-    {
+    public function __construct(
+        private \ReflectionClass $classReflector,
+        array $excludedVendors = [],
+    ) {
         $this->className = $classReflector->name;
-        $this->classReflector = $classReflector;
         $this->excludedVendors = $excludedVendors;
     }
 
@@ -84,7 +84,7 @@ class ReflectionClassResource implements SelfCheckingResourceInterface
             $file = $class->getFileName();
             if (false !== $file && is_file($file)) {
                 foreach ($this->excludedVendors as $vendor) {
-                    if (str_starts_with($file, $vendor) && false !== strpbrk(substr($file, \strlen($vendor), 1), '/'.\DIRECTORY_SEPARATOR)) {
+                    if (\in_array($file[\strlen($vendor)] ?? '', ['/', \DIRECTORY_SEPARATOR], true) && str_starts_with($file, $vendor)) {
                         $file = false;
                         break;
                     }
@@ -165,6 +165,13 @@ class ReflectionClassResource implements SelfCheckingResourceInterface
         }
 
         foreach ($class->getMethods(\ReflectionMethod::IS_PUBLIC | \ReflectionMethod::IS_PROTECTED) as $m) {
+            foreach ($this->excludedVendors as $vendor) {
+                $file = $m->getFileName();
+                if (\in_array($file[\strlen($vendor)] ?? '', ['/', \DIRECTORY_SEPARATOR], true) && str_starts_with($file, $vendor)) {
+                    continue 2;
+                }
+            }
+
             foreach ($m->getAttributes() as $a) {
                 $attributes[] = [$a->getName(), (string) $a];
             }
@@ -201,16 +208,16 @@ class ReflectionClassResource implements SelfCheckingResourceInterface
             yield print_r($class->name::getSubscribedEvents(), true);
         }
 
-        if (interface_exists(MessageSubscriberInterface::class, false) && $class->isSubclassOf(MessageSubscriberInterface::class)) {
-            yield MessageSubscriberInterface::class;
-            foreach ($class->name::getHandledMessages() as $key => $value) {
-                yield $key.print_r($value, true);
-            }
-        }
-
         if (interface_exists(ServiceSubscriberInterface::class, false) && $class->isSubclassOf(ServiceSubscriberInterface::class)) {
             yield ServiceSubscriberInterface::class;
             yield print_r($class->name::getSubscribedServices(), true);
+        }
+
+        if (interface_exists(FormTypeExtensionInterface::class, false) && $class->isSubclassOf(FormTypeExtensionInterface::class)) {
+            yield FormTypeExtensionInterface::class;
+            foreach ($class->name::getExtendedTypes() as $key => $value) {
+                yield $key.print_r($value, true);
+            }
         }
     }
 }

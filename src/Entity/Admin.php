@@ -5,11 +5,13 @@ namespace App\Entity;
 use App\Repository\AdminRepository;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
+use Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface;
+use Symfony\Component\Security\Core\User\UserInterface;
 
 #[ORM\Entity(repositoryClass: AdminRepository::class)]
 #[ORM\Table(name: 'admin')]
 #[ORM\HasLifecycleCallbacks]
-class Admin
+class Admin implements UserInterface, PasswordAuthenticatedUserInterface
 {
     #[ORM\Id]
     #[ORM\GeneratedValue]
@@ -22,8 +24,15 @@ class Admin
     #[ORM\Column(type: Types::STRING, length: 255)]
     private ?string $prenom = null;
 
+    #[ORM\Column(length: 255, unique: true)] // Unique pour éviter les doublons
+    private ?string $identifiant = null;
+
+   
     #[ORM\Column(type: Types::STRING, length: 255)]
-    private ?string $mot_de_passe = null;
+    private ?string $password = null;
+
+    #[ORM\Column(type: 'json')]
+    private array $roles = [];
 
     #[ORM\Column(type: Types::DATETIME_MUTABLE)]
     private ?\DateTimeInterface $createdAt = null;
@@ -31,75 +40,58 @@ class Admin
     #[ORM\Column(type: Types::DATETIME_MUTABLE, nullable: true)]
     private ?\DateTimeInterface $updatedAt = null;
 
-    public function getId(): ?int
+
+    public function getUserIdentifier(): string
     {
-        return $this->id;
+        return (string) $this->identifiant;
     }
 
-    public function getNom(): ?string
+    public function getRoles(): array
     {
-        return $this->nom;
+        $roles = $this->roles;
+        // On garantit que chaque admin a au moins le rôle ROLE_ADMIN
+        $roles[] = 'ROLE_ADMIN';
+        return array_unique($roles);
     }
 
-    public function setNom(string $nom): static
+    public function setRoles(array $roles): static
     {
-        $this->nom = $nom;
+        $this->roles = $roles;
         return $this;
     }
 
-    public function getPrenom(): ?string
+    public function getPassword(): ?string
     {
-        return $this->prenom;
+        return $this->password;
     }
 
-    public function setPrenom(string $prenom): static
+    public function setPassword(string $password): static
     {
-        $this->prenom = $prenom;
+        $this->password = $password;
         return $this;
     }
 
-    public function getMotDePasse(): ?string
+    public function eraseCredentials(): void
     {
-        return $this->mot_de_passe;
+        // Si tu stockes des données sensibles temporairement, efface-les ici
     }
 
-    public function setMotDePasse(string $mot_de_passe): static
-    {
-        $this->mot_de_passe = $mot_de_passe;
-        return $this;
-    }
+    // --- LES AUTRES GETTERS / SETTERS ---
 
-    public function getCreatedAt(): ?\DateTimeInterface
-    {
-        return $this->createdAt;
-    }
+    public function getId(): ?int { return $this->id; }
 
-    public function getUpdatedAt(): ?\DateTimeInterface
-    {
-        return $this->updatedAt;
-    }
+    public function getNom(): ?string { return $this->nom; }
+    public function setNom(string $nom): static { $this->nom = $nom; return $this; }
 
+    public function getPrenom(): ?string { return $this->prenom; }
+    public function setPrenom(string $prenom): static { $this->prenom = $prenom; return $this; }
+
+    public function getIdentifiant(): ?string { return $this->identifiant; }
+    public function setIdentifiant(string $identifiant): static { $this->identifiant = $identifiant; return $this; }
 
     #[ORM\PrePersist]
-    public function onPrePersist(): void
-    {
-        $this->createdAt = new \DateTime();
-    }
+    public function onPrePersist(): void { $this->createdAt = new \DateTime(); }
 
     #[ORM\PreUpdate]
-    public function onPreUpdate(): void
-    {
-        $this->updatedAt = new \DateTime();
-    }
-
-    public function toArray(): array
-    {
-        return [
-            'id' => $this->id,
-            'nom' => $this->nom,
-            'prenom' => $this->prenom,
-            'createdAt' => $this->createdAt?->format('Y-m-d H:i:s'),
-            'updatedAt' => $this->updatedAt?->format('Y-m-d H:i:s'),
-        ];
-    }
+    public function onPreUpdate(): void { $this->updatedAt = new \DateTime(); }
 }

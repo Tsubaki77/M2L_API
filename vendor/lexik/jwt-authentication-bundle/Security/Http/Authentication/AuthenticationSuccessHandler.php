@@ -24,16 +24,15 @@ use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
  */
 class AuthenticationSuccessHandler implements AuthenticationSuccessHandlerInterface
 {
-    private $cookieProviders;
-
-    protected $jwtManager;
-    protected $dispatcher;
-    protected $removeTokenFromBodyWhenCookiesUsed;
+    protected JWTTokenManagerInterface $jwtManager;
+    protected EventDispatcherInterface $dispatcher;
+    protected bool $removeTokenFromBodyWhenCookiesUsed;
+    private iterable $cookieProviders;
 
     /**
      * @param iterable|JWTCookieProvider[] $cookieProviders
      */
-    public function __construct(JWTTokenManagerInterface $jwtManager, EventDispatcherInterface $dispatcher, $cookieProviders = [], bool $removeTokenFromBodyWhenCookiesUsed = true)
+    public function __construct(JWTTokenManagerInterface $jwtManager, EventDispatcherInterface $dispatcher, iterable $cookieProviders = [], bool $removeTokenFromBodyWhenCookiesUsed = true)
     {
         $this->jwtManager = $jwtManager;
         $this->dispatcher = $dispatcher;
@@ -49,10 +48,7 @@ class AuthenticationSuccessHandler implements AuthenticationSuccessHandlerInterf
         return $this->handleAuthenticationSuccess($token->getUser());
     }
 
-    /**
-     * @return Response
-     */
-    public function handleAuthenticationSuccess(UserInterface $user, $jwt = null)
+    public function handleAuthenticationSuccess(UserInterface $user, $jwt = null, array $data = []): Response
     {
         if (null === $jwt) {
             $jwt = $this->jwtManager->create($user);
@@ -63,8 +59,8 @@ class AuthenticationSuccessHandler implements AuthenticationSuccessHandlerInterf
             $jwtCookies[] = $cookieProvider->createCookie($jwt);
         }
 
-        $response = new JWTAuthenticationSuccessResponse($jwt, [], $jwtCookies);
-        $event = new AuthenticationSuccessEvent(['token' => $jwt], $user, $response);
+        $response = new JWTAuthenticationSuccessResponse($jwt, $data, $jwtCookies);
+        $event = new AuthenticationSuccessEvent(['token' => $jwt] + $data, $user, $response);
 
         $this->dispatcher->dispatch($event, Events::AUTHENTICATION_SUCCESS);
         $responseData = $event->getData();
@@ -76,7 +72,7 @@ class AuthenticationSuccessHandler implements AuthenticationSuccessHandlerInterf
         if ($responseData) {
             $response->setData($responseData);
         } else {
-            $response->setStatusCode(JWTAuthenticationSuccessResponse::HTTP_NO_CONTENT);
+            $response->setStatusCode(Response::HTTP_NO_CONTENT);
         }
 
         return $response;

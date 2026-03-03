@@ -2,20 +2,17 @@
 
 namespace Lexik\Bundle\JWTAuthenticationBundle\DependencyInjection;
 
-use Symfony\Component\Config\Definition\BaseNode;
+use ApiPlatform\Symfony\Bundle\ApiPlatformBundle;
 use Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition;
 use Symfony\Component\Config\Definition\Builder\TreeBuilder;
 use Symfony\Component\Config\Definition\ConfigurationInterface;
 use Symfony\Component\HttpFoundation\Cookie;
-use Symfony\Component\Security\Core\User\UserInterface;
 
 /**
  * LexikJWTAuthenticationBundle Configuration.
  */
 class Configuration implements ConfigurationInterface
 {
-    public const INVALID_KEY_PATH = "The file %s doesn't exist or is not readable.\nIf the configured encoder doesn't need this to be configured, please don't set this option or leave it null.";
-
     /**
      * {@inheritdoc}
      */
@@ -27,14 +24,6 @@ class Configuration implements ConfigurationInterface
             ->getRootNode()
             ->addDefaultsIfNotSet()
             ->children()
-                ->scalarNode('private_key_path')
-                    ->setDeprecated(...$this->getDeprecationParameters('The "%path%.%node%" configuration key is deprecated since version 2.5. Use "%path%.secret_key" instead.', '2.5'))
-                    ->defaultNull()
-                ->end()
-                ->scalarNode('public_key_path')
-                    ->setDeprecated(...$this->getDeprecationParameters('The "%path%.%node%" configuration key is deprecated since version 2.5. Use "%path%.public_key" instead.', '2.5'))
-                    ->defaultNull()
-                ->end()
                 ->scalarNode('public_key')
                     ->info('The key used to sign tokens (useless for HMAC). If not set, the key will be automatically computed from the secret key.')
                     ->defaultNull()
@@ -71,21 +60,11 @@ class Configuration implements ConfigurationInterface
                             ->defaultValue('RS256')
                             ->cannotBeEmpty()
                         ->end()
-                        ->enumNode('crypto_engine')
-                            ->values(['openssl', 'phpseclib'])
-                            ->defaultValue('openssl')
-                            ->setDeprecated(...$this->getDeprecationParameters('The "%path%.%node%" configuration key is deprecated since version 2.5, built-in encoders support OpenSSL only', '2.5'))
-                        ->end()
                     ->end()
                 ->end()
-                ->scalarNode('user_identity_field')
-                    ->setDeprecated(...$this->getDeprecationParameters('The "%path%.%node%" configuration key is deprecated since version 2.16, use "%path%.user_id_claim" or implement "' . UserInterface::class . '::getUserIdentifier()" instead.', '2.16'))
+                ->scalarNode('user_id_claim')
                     ->defaultValue('username')
                     ->cannotBeEmpty()
-                ->end()
-                ->scalarNode('user_id_claim')
-                    ->defaultNull()
-                    ->info('If null, the user ID claim will have the same name as the one defined by the option "user_identity_field"')
                 ->end()
                 ->append($this->getTokenExtractorsNode())
                 ->scalarNode('remove_token_from_body_when_cookies_used')
@@ -109,6 +88,7 @@ class Configuration implements ConfigurationInterface
                             ->scalarNode('domain')->defaultNull()->end()
                             ->scalarNode('secure')->defaultTrue()->end()
                             ->scalarNode('httpOnly')->defaultTrue()->end()
+                            ->scalarNode('partitioned')->defaultFalse()->end()
                             ->arrayNode('split')
                                 ->scalarPrototype()->end()
                             ->end()
@@ -116,6 +96,7 @@ class Configuration implements ConfigurationInterface
                     ->end()
                 ->end()
                 ->arrayNode('api_platform')
+                    ->canBeEnabled()
                     ->info('API Platform compatibility: add check_path in OpenAPI documentation.')
                     ->children()
                         ->scalarNode('check_path')
@@ -132,7 +113,130 @@ class Configuration implements ConfigurationInterface
                         ->end()
                     ->end()
                 ->end()
-            ->end();
+                ->arrayNode('access_token_issuance')
+                    ->fixXmlConfig('access_token_issuance')
+                    ->canBeEnabled()
+                    ->children()
+                        ->arrayNode('signature')
+                            ->fixXmlConfig('signature')
+                            ->addDefaultsIfNotSet()
+                            ->children()
+                                ->scalarNode('algorithm')
+                                    ->isRequired()
+                                    ->info('The algorithm use to sign the access tokens.')
+                                ->end()
+                                ->scalarNode('key')
+                                    ->isRequired()
+                                    ->info('The signature key. It shall be JWK encoded.')
+                                ->end()
+                            ->end()
+                        ->end()
+                        ->arrayNode('encryption')
+                            ->fixXmlConfig('encryption')
+                            ->canBeEnabled()
+                            ->children()
+                                ->scalarNode('key_encryption_algorithm')
+                                    ->isRequired()
+                                    ->cannotBeEmpty()
+                                    ->info('The key encryption algorithm is used to encrypt the token.')
+                                ->end()
+                                ->scalarNode('content_encryption_algorithm')
+                                    ->isRequired()
+                                    ->cannotBeEmpty()
+                                    ->info('The key encryption algorithm is used to encrypt the token.')
+                                ->end()
+                                ->scalarNode('key')
+                                    ->isRequired()
+                                    ->info('The encryption key. It shall be JWK encoded.')
+                                ->end()
+                            ->end()
+                        ->end()
+                    ->end()
+                ->end()
+                ->arrayNode('access_token_verification')
+                    ->fixXmlConfig('access_token_verification')
+                    ->canBeEnabled()
+                    ->children()
+                        ->arrayNode('signature')
+                            ->fixXmlConfig('signature')
+                            ->addDefaultsIfNotSet()
+                            ->children()
+                                ->arrayNode('header_checkers')
+                                    ->fixXmlConfig('header_checkers')
+                                    ->scalarPrototype()->end()
+                                    ->defaultValue([])
+                                    ->info('The headers to be checked for validating the JWS.')
+                                ->end()
+                                ->arrayNode('claim_checkers')
+                                    ->fixXmlConfig('claim_checkers')
+                                    ->scalarPrototype()->end()
+                                    ->defaultValue(['exp_with_clock_skew', 'iat_with_clock_skew', 'nbf_with_clock_skew'])
+                                    ->info('The claims to be checked for validating the JWS.')
+                                ->end()
+                                ->arrayNode('mandatory_claims')
+                                    ->fixXmlConfig('mandatory_claims')
+                                    ->scalarPrototype()->end()
+                                    ->defaultValue([])
+                                    ->info('The list of claims that shall be present in the JWS.')
+                                ->end()
+                                ->arrayNode('allowed_algorithms')
+                                    ->fixXmlConfig('allowed_algorithms')
+                                    ->scalarPrototype()->end()
+                                    ->requiresAtLeastOneElement()
+                                    ->info('The algorithms allowed to be used for token verification.')
+                                ->end()
+                                ->scalarNode('keyset')
+                                    ->isRequired()
+                                    ->info('The signature keyset. It shall be JWKSet encoded.')
+                                ->end()
+                            ->end()
+                        ->end()
+                        ->arrayNode('encryption')
+                            ->fixXmlConfig('encryption')
+                            ->canBeEnabled()
+                            ->children()
+                                ->booleanNode('continue_on_decryption_failure')
+                                    ->defaultFalse()
+                                    ->info('If enable, non-encrypted tokens or tokens that failed during decryption or verification processes are accepted.')
+                                ->end()
+                                ->arrayNode('header_checkers')
+                                    ->fixXmlConfig('header_checkers')
+                                    ->scalarPrototype()->end()
+                                    ->defaultValue(['iat_with_clock_skew', 'nbf_with_clock_skew', 'exp_with_clock_skew'])
+                                    ->info('The headers to be checked for validating the JWE.')
+                                ->end()
+                                ->arrayNode('allowed_key_encryption_algorithms')
+                                    ->fixXmlConfig('allowed_key_encryption_algorithms')
+                                    ->scalarPrototype()->end()
+                                    ->requiresAtLeastOneElement()
+                                    ->info('The key encryption algorithm is used to encrypt the token.')
+                                ->end()
+                                ->arrayNode('allowed_content_encryption_algorithms')
+                                    ->fixXmlConfig('allowed_content_encryption_algorithms')
+                                    ->scalarPrototype()->end()
+                                    ->requiresAtLeastOneElement()
+                                    ->info('The key encryption algorithm is used to encrypt the token.')
+                                ->end()
+                                ->scalarNode('keyset')
+                                    ->isRequired()
+                                    ->info('The encryption keyset. It shall be JWKSet encoded.')
+                                ->end()
+                            ->end()
+                        ->end()
+                    ->end()
+                ->end()
+                ->arrayNode('blocklist_token')
+                    ->addDefaultsIfNotSet()
+                    ->canBeEnabled()
+                    ->children()
+                        ->scalarNode('cache')
+                            ->defaultValue('cache.app')
+                            ->info('Storage to track blocked tokens')
+                        ->end()
+                    ->end()
+                ->end()
+            ->end()
+        ->end();
 
         return $treeBuilder;
     }
@@ -186,17 +290,5 @@ class Configuration implements ConfigurationInterface
         ;
 
         return $node;
-    }
-
-    /**
-     * Returns the correct deprecation parameters for setDeprecated.
-     */
-    private function getDeprecationParameters(string $message, string $version): array
-    {
-        if (method_exists(BaseNode::class, 'getDeprecation')) {
-            return ['lexik/jwt-authentication-bundle', $version, $message];
-        }
-
-        return [$message];
     }
 }

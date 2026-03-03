@@ -6,15 +6,17 @@ use ApiPlatform\Symfony\Bundle\ApiPlatformBundle;
 use Lexik\Bundle\JWTAuthenticationBundle\Encoder\JWTEncoderInterface;
 use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\Config\FileLocator;
+use Symfony\Component\Config\Loader\LoaderInterface;
 use Symfony\Component\Console\Application;
 use Symfony\Component\DependencyInjection\Alias;
 use Symfony\Component\DependencyInjection\Argument\IteratorArgument;
 use Symfony\Component\DependencyInjection\ChildDefinition;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Exception\LogicException;
-use Symfony\Component\DependencyInjection\Loader\XmlFileLoader;
+use Symfony\Component\DependencyInjection\Extension\Extension;
+use Symfony\Component\DependencyInjection\Loader\PhpFileLoader;
 use Symfony\Component\DependencyInjection\Reference;
-use Symfony\Component\HttpKernel\DependencyInjection\Extension;
+use Symfony\Component\HttpKernel\Kernel;
 
 /**
  * This is the class that loads and manages your bundle configuration.
@@ -26,36 +28,19 @@ class LexikJWTAuthenticationExtension extends Extension
     /**
      * {@inheritdoc}
      */
-    public function load(array $configs, ContainerBuilder $container)
+    public function load(array $configs, ContainerBuilder $container): void
     {
         $configuration = new Configuration();
         $config = $this->processConfiguration($configuration, $configs);
 
-        $loader = new XmlFileLoader($container, new FileLocator(__DIR__ . '/../Resources/config'));
+        $loader = new PhpFileLoader($container, new FileLocator(__DIR__ . '/../Resources/config'));
 
-        if (method_exists(Alias::class, 'getDeprecation')) {
-            $loader->load('deprecated_51.xml');
-        } else {
-            $loader->load('deprecated.xml');
-        }
-        $loader->load('jwt_manager.xml');
-        $loader->load('key_loader.xml');
-        $loader->load('namshi.xml');
-        $loader->load('lcobucci.xml');
-        $loader->load('response_interceptor.xml');
-        $loader->load('token_authenticator.xml');
-        $loader->load('token_extractor.xml');
-        $loader->load('guard_authenticator.xml');
-
-        if (isset($config['private_key_path'])) {
-            $config['secret_key'] = $config['private_key_path'];
-            $container->setParameter('lexik_jwt_authentication.private_key_path', $config['secret_key']);
-        }
-
-        if (isset($config['public_key_path'])) {
-            $config['public_key'] = $config['public_key_path'];
-            $container->setParameter('lexik_jwt_authentication.public_key_path', $config['public_key']);
-        }
+        $loader->load('jwt_manager.php');
+        $loader->load('key_loader.php');
+        $loader->load('lcobucci.php');
+        $loader->load('response_interceptor.php');
+        $loader->load('token_authenticator.php');
+        $loader->load('token_extractor.php');
 
         if (empty($config['public_key']) && empty($config['secret_key'])) {
             $e = new InvalidConfigurationException('You must either configure a "public_key" or a "secret_key".');
@@ -67,22 +52,16 @@ class LexikJWTAuthenticationExtension extends Extension
         $container->setParameter('lexik_jwt_authentication.pass_phrase', $config['pass_phrase']);
         $container->setParameter('lexik_jwt_authentication.token_ttl', $config['token_ttl']);
         $container->setParameter('lexik_jwt_authentication.clock_skew', $config['clock_skew']);
-        $container->setParameter('lexik_jwt_authentication.user_identity_field', $config['user_identity_field']);
         $container->setParameter('lexik_jwt_authentication.allow_no_expiration', $config['allow_no_expiration']);
+        $container->setParameter('lexik_jwt_authentication.user_id_claim', $config['user_id_claim']);
 
-        $user_id_claim = $config['user_id_claim'] ?: $config['user_identity_field'];
-        $container->setParameter('lexik_jwt_authentication.user_id_claim', $user_id_claim);
         $encoderConfig = $config['encoder'];
-
-        if ('lexik_jwt_authentication.encoder.default' === $encoderConfig['service']) {
-            @trigger_error('Using "lexik_jwt_authentication.encoder.default" as encoder service is deprecated since LexikJWTAuthenticationBundle 2.5, use "lexik_jwt_authentication.encoder.lcobucci" (default) or your own encoder service instead.', E_USER_DEPRECATED);
-        }
 
         $container->setAlias('lexik_jwt_authentication.encoder', new Alias($encoderConfig['service'], true));
         $container->setAlias(JWTEncoderInterface::class, 'lexik_jwt_authentication.encoder');
         $container->setAlias(
             'lexik_jwt_authentication.key_loader',
-            new Alias('lexik_jwt_authentication.key_loader.' . ('openssl' === $encoderConfig['crypto_engine'] && 'lexik_jwt_authentication.encoder.default' === $encoderConfig['service'] ? $encoderConfig['crypto_engine'] : 'raw'), true)
+            new Alias('lexik_jwt_authentication.key_loader.raw', true)
         );
 
         $container
@@ -97,9 +76,8 @@ class LexikJWTAuthenticationExtension extends Extension
         }
 
         $container->setParameter('lexik_jwt_authentication.encoder.signature_algorithm', $encoderConfig['signature_algorithm']);
-        $container->setParameter('lexik_jwt_authentication.encoder.crypto_engine', $encoderConfig['crypto_engine']);
 
-        $tokenExtractors = self::createTokenExtractors($container, $config['token_extractors']);
+        $tokenExtractors = $this->createTokenExtractors($container, $config['token_extractors']);
         $container
             ->getDefinition('lexik_jwt_authentication.extractor.chain_extractor')
             ->replaceArgument(0, $tokenExtractors);
@@ -111,10 +89,14 @@ class LexikJWTAuthenticationExtension extends Extension
         }
 
         if ($config['set_cookies']) {
-            $loader->load('cookie.xml');
+            $loader->load('cookie.php');
 
             $cookieProviders = [];
             foreach ($config['set_cookies'] as $name => $attributes) {
+                if ($attributes['partitioned'] && Kernel::VERSION < '6.4') {
+                    throw new \LogicException(sprintf('The `partitioned` option for cookies is only available for Symfony 6.4 and above. You are currently on version %s', Kernel::VERSION));
+                }
+                
                 $container
                     ->setDefinition($id = "lexik_jwt_authentication.cookie_provider.$name", new ChildDefinition('lexik_jwt_authentication.cookie_provider'))
                     ->replaceArgument(0, $name)
@@ -124,7 +106,8 @@ class LexikJWTAuthenticationExtension extends Extension
                     ->replaceArgument(4, $attributes['domain'])
                     ->replaceArgument(5, $attributes['secure'])
                     ->replaceArgument(6, $attributes['httpOnly'])
-                    ->replaceArgument(7, $attributes['split']);
+                    ->replaceArgument(7, $attributes['split'])
+                    ->replaceArgument(8, $attributes['partitioned']);
                 $cookieProviders[] = new Reference($id);
             }
 
@@ -134,7 +117,7 @@ class LexikJWTAuthenticationExtension extends Extension
         }
 
         if (class_exists(Application::class)) {
-            $loader->load('console.xml');
+            $loader->load('console.php');
 
             $container
                 ->getDefinition('lexik_jwt_authentication.generate_keypair_command')
@@ -142,14 +125,17 @@ class LexikJWTAuthenticationExtension extends Extension
                 ->replaceArgument(2, $config['public_key'])
                 ->replaceArgument(3, $config['pass_phrase'])
                 ->replaceArgument(4, $encoderConfig['signature_algorithm']);
+            if (!$container->hasParameter('kernel.debug') || !$container->getParameter('kernel.debug')) {
+                $container->removeDefinition('lexik_jwt_authentication.migrate_config_command');
+            }
         }
 
-        if (!class_exists(ApiPlatformBundle::class) && (isset($config['api_platform']['check_path']) || isset($config['api_platform']['username_path']) || isset($config['api_platform']['password_path']))) {
-            throw new LogicException('API Platform cannot be detected. Try running "composer require api-platform/core".');
-        }
+        if ($this->isConfigEnabled($container, $config['api_platform'])) {
+            if (!class_exists(ApiPlatformBundle::class)) {
+                throw new LogicException('API Platform cannot be detected. Try running "composer require api-platform/core".');
+            }
 
-        if (class_exists(ApiPlatformBundle::class)) {
-            $loader->load('api_platform.xml');
+            $loader->load('api_platform.php');
 
             $container
                 ->getDefinition('lexik_jwt_authentication.api_platform.openapi.factory')
@@ -157,13 +143,24 @@ class LexikJWTAuthenticationExtension extends Extension
                 ->replaceArgument(2, $config['api_platform']['username_path'] ?? null)
                 ->replaceArgument(3, $config['api_platform']['password_path'] ?? null);
         }
+
+        $this->processWithWebTokenConfig($config, $container, $loader);
+
+        if ($this->isConfigEnabled($container, $config['blocklist_token'])) {
+            $loader->load('blocklist_token.php');
+            $blockListTokenConfig = $config['blocklist_token'];
+            $container->setAlias('lexik_jwt_authentication.blocklist_token.cache', $blockListTokenConfig['cache']);
+        } else {
+            $container->getDefinition('lexik_jwt_authentication.payload_enrichment.random_jti_enrichment')
+                ->clearTag('lexik_jwt_authentication.payload_enrichment');
+        }
     }
 
-    private static function createTokenExtractors(ContainerBuilder $container, array $tokenExtractorsConfig)
+    private function createTokenExtractors(ContainerBuilder $container, array $tokenExtractorsConfig): array
     {
         $map = [];
 
-        if ($tokenExtractorsConfig['authorization_header']['enabled']) {
+        if ($this->isConfigEnabled($container, $tokenExtractorsConfig['authorization_header'])) {
             $authorizationHeaderExtractorId = 'lexik_jwt_authentication.extractor.authorization_header_extractor';
             $container
                 ->getDefinition($authorizationHeaderExtractorId)
@@ -173,7 +170,7 @@ class LexikJWTAuthenticationExtension extends Extension
             $map[] = new Reference($authorizationHeaderExtractorId);
         }
 
-        if ($tokenExtractorsConfig['query_parameter']['enabled']) {
+        if ($this->isConfigEnabled($container, $tokenExtractorsConfig['query_parameter'])) {
             $queryParameterExtractorId = 'lexik_jwt_authentication.extractor.query_parameter_extractor';
             $container
                 ->getDefinition($queryParameterExtractorId)
@@ -182,7 +179,7 @@ class LexikJWTAuthenticationExtension extends Extension
             $map[] = new Reference($queryParameterExtractorId);
         }
 
-        if ($tokenExtractorsConfig['cookie']['enabled']) {
+        if ($this->isConfigEnabled($container, $tokenExtractorsConfig['cookie'])) {
             $cookieExtractorId = 'lexik_jwt_authentication.extractor.cookie_extractor';
             $container
                 ->getDefinition($cookieExtractorId)
@@ -191,7 +188,7 @@ class LexikJWTAuthenticationExtension extends Extension
             $map[] = new Reference($cookieExtractorId);
         }
 
-        if ($tokenExtractorsConfig['split_cookie']['enabled']) {
+        if ($this->isConfigEnabled($container, $tokenExtractorsConfig['split_cookie'])) {
             $cookieExtractorId = 'lexik_jwt_authentication.extractor.split_cookie_extractor';
             $container
                 ->getDefinition($cookieExtractorId)
@@ -201,5 +198,58 @@ class LexikJWTAuthenticationExtension extends Extension
         }
 
         return $map;
+    }
+
+    private function processWithWebTokenConfig(array $config, ContainerBuilder $container, LoaderInterface $loader): void
+    {
+        if ($config['access_token_issuance']['enabled'] === false && $config['access_token_verification']['enabled'] === false) {
+            return;
+        }
+        $loader->load('web_token.php');
+        if ($config['access_token_issuance']['enabled'] === true) {
+            $loader->load('web_token_issuance.php');
+            $accessTokenBuilder = 'lexik_jwt_authentication.access_token_builder';
+            $accessTokenBuilderDefinition = $container->getDefinition($accessTokenBuilder);
+            $accessTokenBuilderDefinition
+                ->replaceArgument(3, $config['access_token_issuance']['signature']['algorithm'])
+                ->replaceArgument(4, $config['access_token_issuance']['signature']['key'])
+            ;
+            if ($config['access_token_issuance']['encryption']['enabled'] === true) {
+                $accessTokenBuilderDefinition
+                    ->replaceArgument(5, $config['access_token_issuance']['encryption']['key_encryption_algorithm'])
+                    ->replaceArgument(6, $config['access_token_issuance']['encryption']['content_encryption_algorithm'])
+                    ->replaceArgument(7, $config['access_token_issuance']['encryption']['key'])
+                ;
+            }
+        }
+        if ($config['access_token_verification']['enabled'] === true) {
+            $loader->load('web_token_verification.php');
+            $accessTokenLoader = 'lexik_jwt_authentication.access_token_loader';
+            $accessTokenLoaderDefinition = $container->getDefinition($accessTokenLoader);
+            $accessTokenLoaderDefinition
+                ->replaceArgument(3, $config['access_token_verification']['signature']['claim_checkers'])
+                ->replaceArgument(4, $config['access_token_verification']['signature']['header_checkers'])
+                ->replaceArgument(5, $config['access_token_verification']['signature']['mandatory_claims'])
+                ->replaceArgument(6, $config['access_token_verification']['signature']['allowed_algorithms'])
+                ->replaceArgument(7, $config['access_token_verification']['signature']['keyset'])
+            ;
+            if ($config['access_token_verification']['encryption']['enabled'] === true) {
+                $accessTokenLoaderDefinition
+                    ->replaceArgument(8, $config['access_token_verification']['encryption']['continue_on_decryption_failure'])
+                    ->replaceArgument(9, $config['access_token_verification']['encryption']['header_checkers'])
+                    ->replaceArgument(10, $config['access_token_verification']['encryption']['allowed_key_encryption_algorithms'])
+                    ->replaceArgument(11, $config['access_token_verification']['encryption']['allowed_content_encryption_algorithms'])
+                    ->replaceArgument(12, $config['access_token_verification']['encryption']['keyset'])
+                ;
+            } else {
+                $accessTokenLoaderDefinition
+                    ->replaceArgument(8, null)
+                    ->replaceArgument(9, null)
+                    ->replaceArgument(10, null)
+                    ->replaceArgument(11, null)
+                    ->replaceArgument(12, null)
+                ;
+            }
+        }
     }
 }
