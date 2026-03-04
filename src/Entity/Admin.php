@@ -3,6 +3,8 @@
 namespace App\Entity;
 
 use App\Repository\AdminRepository;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface;
@@ -39,6 +41,17 @@ class Admin implements UserInterface, PasswordAuthenticatedUserInterface
 
     #[ORM\Column(type: Types::DATETIME_MUTABLE, nullable: true)]
     private ?\DateTimeInterface $updatedAt = null;
+
+    /**
+     * @var Collection<int, Salles>
+     */
+    #[ORM\OneToMany(targetEntity: Salles::class, mappedBy: 'id_admin')]
+    private Collection $salles;
+
+    public function __construct()
+    {
+        $this->salles = new ArrayCollection();
+    }
 
 
     public function getUserIdentifier(): string
@@ -94,4 +107,34 @@ class Admin implements UserInterface, PasswordAuthenticatedUserInterface
 
     #[ORM\PreUpdate]
     public function onPreUpdate(): void { $this->updatedAt = new \DateTime(); }
+
+    /**
+     * @return Collection<int, Salles>
+     */
+    public function getSalles(): Collection
+    {
+        return $this->salles;
+    }
+
+    public function addSalle(Salles $salle): static
+    {
+        if (!$this->salles->contains($salle)) {
+            $this->salles->add($salle);
+            $salle->setIdAdmin($this);
+        }
+
+        return $this;
+    }
+
+    public function removeSalle(Salles $salle): static
+    {
+        if ($this->salles->removeElement($salle)) {
+            // set the owning side to null (unless already changed)
+            if ($salle->getIdAdmin() === $this) {
+                $salle->setIdAdmin(null);
+            }
+        }
+
+        return $this;
+    }
 }

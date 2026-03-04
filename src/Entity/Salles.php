@@ -37,6 +37,10 @@ class Salles
     #[ORM\Column(type: Types::DATETIME_MUTABLE, nullable: true)]
     private ?\DateTimeInterface $updatedAt = null;
 
+    #[ORM\ManyToOne(inversedBy: 'salles')]
+    #[ORM\JoinColumn(nullable: false)]
+    private ?Admin $id_admin = null;
+
 
     public function getId(): ?int
     {
@@ -133,5 +137,17 @@ class Salles
             'createdAt' => $this->createdAt?->format('Y-m-d H:i:s'),
             'updatedAt' => $this->updatedAt?->format('Y-m-d H:i:s'),
         ];
+    }
+
+    public function getIdAdmin(): ?Admin
+    {
+        return $this->id_admin;
+    }
+
+    public function setIdAdmin(?Admin $id_admin): static
+    {
+        $this->id_admin = $id_admin;
+
+        return $this;
     }
 }
