@@ -36,6 +36,16 @@ class Gestionnaires implements UserInterface, PasswordAuthenticatedUserInterface
     #[Groups(['admin:read'])]
     private ?string $email = null;
 
+    #[ORM\Column(length: 20, nullable: true)]
+    #[Groups(['admin:read'])]
+    private ?string $telephone = null;
+
+    // 'actif' ou 'inactif' : permet à un super-admin de désactiver un compte
+    // sans avoir à le supprimer définitivement
+    #[ORM\Column(length: 20)]
+    #[Groups(['admin:read'])]
+    private string $statut = 'actif';
+
     #[ORM\Column(length: 255)]
     #[Assert\NotBlank(message: 'Le mot de passe ne peut pas être vide.')]
     #[Assert\Regex(
@@ -55,6 +65,10 @@ class Gestionnaires implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(nullable: true)]
     private ?\DateTimeImmutable $updated_at = null;
 
+    // Le nom de la propriété (id_gestionnaires) est différent du nom de ce
+    // getter (getId) : on remet l'annotation Groups ici, sinon Symfony ne
+    // sait pas à quel champ du JSON elle s'applique et le retire silencieusement.
+    #[Groups(['admin:read', 'salle:read'])]
     public function getId(): ?int
     {
         return $this->id_gestionnaires;
@@ -108,7 +122,31 @@ class Gestionnaires implements UserInterface, PasswordAuthenticatedUserInterface
         return $this;
     }
 
-    
+    public function getTelephone(): ?string
+    {
+        return $this->telephone;
+    }
+
+    public function setTelephone(?string $telephone): static
+    {
+        $this->telephone = $telephone;
+
+        return $this;
+    }
+
+    public function getStatut(): string
+    {
+        return $this->statut;
+    }
+
+    public function setStatut(string $statut): static
+    {
+        $this->statut = $statut;
+
+        return $this;
+    }
+
+
 
     // @see UserInterface
 

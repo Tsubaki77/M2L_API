@@ -48,12 +48,14 @@ class GestionnairesController extends AbstractController
         $nouveauGestionnaire->setIdentifiant($data['identifiant']);
         $nouveauGestionnaire->setRoles(['ROLE_GESTIONNAIRE']); // Rôle par défaut
 
-        $nouveauGestionnaire->setNom($data['nom']); 
-        
+        $nouveauGestionnaire->setNom($data['nom']);
+
         $nouveauGestionnaire->setPrenom($data['prenom']);
 
         $nouveauGestionnaire->setEmail($data['email']);
-        
+
+        $nouveauGestionnaire->setTelephone($data['telephone'] ?? null);
+
         // On met temporairement le mot de passe EN CLAIR pour le Validator
         $nouveauGestionnaire->setPassword($data['password']);
 
@@ -111,6 +113,9 @@ class GestionnairesController extends AbstractController
         if (isset($data['email'])) {
             $gestionnaire->setEmail($data['email']);
         }
+        if (isset($data['telephone'])) {
+            $gestionnaire->setTelephone($data['telephone']);
+        }
         if (isset($data['identifiant'])) {
             $gestionnaire->setIdentifiant($data['identifiant']);
         }
@@ -130,6 +135,37 @@ class GestionnairesController extends AbstractController
             $gestionnaire->setPassword($passwordHasher->hashPassword($gestionnaire, $data['password']));
         }
 
+        $entityManager->flush();
+
+        return $this->json($gestionnaire, 200, [], ['groups' => 'admin:read']);
+    }
+
+    //ACTIVATION / DÉSACTIVATION D'UN COMPTE GESTIONNAIRE
+    #[Route('/gestionnaires/{id}/statut', name: 'update_statut_gestionnaire', methods: ['PATCH'])]
+    public function updateStatutGestionnaire(
+        int $id,
+        Request $request,
+        GestionnairesRepository $gestionnairesRepository,
+        EntityManagerInterface $entityManager
+    ): JsonResponse {
+        $gestionnaire = $gestionnairesRepository->find($id);
+
+        if (!$gestionnaire) {
+            return $this->json(['message' => 'Gestionnaire introuvable'], 404);
+        }
+
+        // On empêche l'utilisateur connecté de se désactiver lui-même
+        if ($this->getUser() === $gestionnaire) {
+            return $this->json(['message' => 'Action refusée : vous ne pouvez pas désactiver votre propre compte.'], 403);
+        }
+
+        $data = json_decode($request->getContent(), true);
+
+        if (empty($data['statut']) || !in_array($data['statut'], ['actif', 'inactif'], true)) {
+            return $this->json(['message' => 'Statut invalide. Valeurs acceptées : actif, inactif'], 400);
+        }
+
+        $gestionnaire->setStatut($data['statut']);
         $entityManager->flush();
 
         return $this->json($gestionnaire, 200, [], ['groups' => 'admin:read']);

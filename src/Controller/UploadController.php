@@ -46,7 +46,13 @@ class UploadController extends AbstractController
             mkdir($uploadDir, 0775, true);
         }
 
-        $file->move($uploadDir, $newFilename);
+        try {
+            $file->move($uploadDir, $newFilename);
+        } catch (\Exception $e) {
+            // Si le dossier n'est pas accessible en écriture côté serveur,
+            // on renvoie un message clair en JSON plutôt qu'une page d'erreur HTML
+            return $this->json(['message' => "Erreur serveur lors de l'enregistrement du fichier."], 500);
+        }
 
         // On retourne l'URL publique accessible depuis le front
         return $this->json([
