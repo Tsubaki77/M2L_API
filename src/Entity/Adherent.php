@@ -2,6 +2,7 @@
 
 namespace App\Entity;
 
+use App\Entity\Ligue;
 use Symfony\Component\Security\Core\User\UserInterface;
 use Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface;
 use App\Repository\AdherentRepository;
@@ -33,8 +34,9 @@ class Adherent implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(type: Types::STRING, length: 255)]
     private string $mot_de_passe;
 
-    #[ORM\Column(type: Types::STRING, length: 255)]
-    private string $ligue;
+    #[ORM\ManyToOne(targetEntity: Ligue::class, inversedBy: 'adherents')]
+    #[ORM\JoinColumn(name: 'ligue_id', nullable: false)]
+    private ?Ligue $ligue = null;
 
     #[ORM\Column(type: Types::STRING, length: 255)]
     private string $poste;
@@ -44,6 +46,7 @@ class Adherent implements UserInterface, PasswordAuthenticatedUserInterface
 
     #[ORM\Column(type: Types::DATETIME_MUTABLE, nullable: true)]
     private ?\DateTimeInterface $updatedAt = null;
+
 
     public function getId(): ?int
     {
@@ -105,12 +108,12 @@ class Adherent implements UserInterface, PasswordAuthenticatedUserInterface
         return $this;
     }
 
-    public function getLigue(): string
+    public function getLigue(): ?Ligue
     {
         return $this->ligue;
     }
 
-    public function setLigue(string $ligue): static
+    public function setLigue(Ligue $ligue): static
     {
         $this->ligue = $ligue;
         return $this;
@@ -178,10 +181,11 @@ class Adherent implements UserInterface, PasswordAuthenticatedUserInterface
             'nom'             => $this->nom,
             'prenom'          => $this->prenom,
             'email'           => $this->email,
-            'ligue'           => $this->ligue,
+            'ligue'           => $this->ligue?->toArray(),
             'poste'           => $this->poste,
             'createdAt'       => $this->createdAt?->format('Y-m-d H:i:s'),
             'updatedAt'       => $this->updatedAt?->format('Y-m-d H:i:s'),
         ];
     }
+
 }

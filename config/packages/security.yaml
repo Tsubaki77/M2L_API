@@ -57,6 +57,7 @@ security:
         # Auth publique adhérents
         - { path: ^/api/adherent/login, roles: PUBLIC_ACCESS }
         - { path: ^/api/register, roles: PUBLIC_ACCESS }
+        - { path: ^/api/ligues, roles: PUBLIC_ACCESS }
 
         # Gestion des types de salles
         - { path: ^/api/types-salles, roles: IS_AUTHENTICATED_FULLY }

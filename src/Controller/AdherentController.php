@@ -6,6 +6,7 @@ use App\Entity\Adherent;
 use App\Entity\Reservations;
 use App\Repository\ReservationsRepository;
 use App\Repository\AdherentRepository;
+use App\Repository\LigueRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -20,6 +21,7 @@ class AdherentController extends AbstractController
 {
     public function __construct(
         private AdherentRepository $adherentRepository,
+        private LigueRepository $ligueRepository,
         private EntityManagerInterface $entityManager,
         private ReservationsRepository $reservationsRepository,
         private UserPasswordHasherInterface $passwordHasher
@@ -50,7 +52,13 @@ class AdherentController extends AbstractController
 
         if (isset($data['nom']))    { $adherent->setNom($data['nom']); }
         if (isset($data['prenom'])) { $adherent->setPrenom($data['prenom']); }
-        if (isset($data['ligue']))  { $adherent->setLigue($data['ligue']); }
+        if (isset($data['ligue'])) {
+            $ligue = $this->ligueRepository->find($data['ligue']);
+            if (!$ligue) {
+                return $this->json(['message' => 'Ligue introuvable'], Response::HTTP_BAD_REQUEST);
+            }
+            $adherent->setLigue($ligue);
+        }
         if (isset($data['poste']))  { $adherent->setPoste($data['poste']); }
 
         $this->entityManager->flush();
@@ -169,7 +177,13 @@ class AdherentController extends AbstractController
 
         if (isset($data['nom']))    { $adherent->setNom($data['nom']); }
         if (isset($data['prenom'])) { $adherent->setPrenom($data['prenom']); }
-        if (isset($data['ligue']))  { $adherent->setLigue($data['ligue']); }
+        if (isset($data['ligue'])) {
+            $ligue = $this->ligueRepository->find($data['ligue']);
+            if (!$ligue) {
+                return $this->json(['message' => 'Ligue introuvable'], Response::HTTP_BAD_REQUEST);
+            }
+            $adherent->setLigue($ligue);
+        }
         if (isset($data['poste']))  { $adherent->setPoste($data['poste']); }
 
         $this->entityManager->flush();

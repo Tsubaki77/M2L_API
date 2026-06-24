@@ -4,6 +4,7 @@ namespace App\Controller;
 
 use App\Entity\Adherent;
 use App\Repository\AdherentRepository;
+use App\Repository\LigueRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -17,6 +18,7 @@ class SecurityController extends AbstractController
 {
     public function __construct(
         private AdherentRepository $adherentRepository,
+        private LigueRepository $ligueRepository,
         private EntityManagerInterface $entityManager,
         private UserPasswordHasherInterface $passwordHasher
     ) {
@@ -56,11 +58,20 @@ class SecurityController extends AbstractController
             ], Response::HTTP_CONFLICT);
         }
 
+        $ligue = $this->ligueRepository->find($data['ligue']);
+
+        if (!$ligue) {
+            return $this->json([
+                'success' => false,
+                'message' => 'Ligue introuvable',
+            ], Response::HTTP_BAD_REQUEST);
+        }
+
         $adherent = new Adherent();
         $adherent->setEmail($data['email']);
         $adherent->setNom($data['nom']);
         $adherent->setPrenom($data['prenom']);
-        $adherent->setLigue($data['ligue']);
+        $adherent->setLigue($ligue);
         $adherent->setPoste($data['poste']);
         $adherent->setNumeroAdherent($data['numero_adherent']);
         $adherent->setMotDePasse(

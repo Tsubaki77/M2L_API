@@ -3,6 +3,7 @@
 namespace App\Repository;
 
 use App\Entity\Adherent;
+use App\Entity\Ligue;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
@@ -27,7 +28,7 @@ class AdherentRepository extends ServiceEntityRepository
     }
 
     /** @return Adherent[] */
-    public function findByLigue(string $ligue): array
+    public function findByLigue(Ligue $ligue): array
     {
         return $this->createQueryBuilder('a')
             ->andWhere('a.ligue = :ligue')
@@ -48,20 +49,20 @@ class AdherentRepository extends ServiceEntityRepository
             ->getResult();
     }
 
-    /** @return array<string, int> Nombre d'adhérents par ligue */
+    /** @return array<int, array{id: int, nom: string, total: int}> Nombre d'adhérents par ligue */
     public function countByLigue(): array
     {
         $rows = $this->createQueryBuilder('a')
-            ->select('a.ligue, COUNT(a.id_adherent) as total')
-            ->groupBy('a.ligue')
+            ->select('l.id AS id, l.nom AS nom, COUNT(a.id_adherent) as total')
+            ->join('a.ligue', 'l')
+            ->groupBy('l.id')
+            ->orderBy('l.nom', 'ASC')
             ->getQuery()
             ->getResult();
 
-        $result = [];
-        foreach ($rows as $row) {
-            $result[$row['ligue']] = (int) $row['total'];
-        }
-
-        return $result;
+        return array_map(
+            fn (array $row) => ['id' => (int) $row['id'], 'nom' => $row['nom'], 'total' => (int) $row['total']],
+            $rows
+        );
     }
 }

@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(php bin/console dbal:run-sql \"SELECT COUNT\\(*\\) AS n FROM adherent\")",
+      "Bash(php bin/console dbal:run-sql \"SELECT COUNT\\(*\\) AS n FROM reservations\")",
+      "Bash(php bin/console dbal:run-sql \"DELETE FROM reservations\")",
+      "Bash(php bin/console dbal:run-sql \"DELETE FROM adherent\")"
+    ]
+  }
+}

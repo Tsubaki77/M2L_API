@@ -24,6 +24,47 @@ class ReservationsRepository extends ServiceEntityRepository
         ->getQuery()
         ->getResult();
 }
+
+    /** @return array<int, array{id: int, nom: string, total: int}> Nombre de réservations par ligue */
+    public function countByLigue(): array
+    {
+        $rows = $this->createQueryBuilder('r')
+            ->select('l.id AS id, l.nom AS nom, COUNT(r.id) as total')
+            ->join('r.adherent', 'a')
+            ->join('a.ligue', 'l')
+            ->groupBy('l.id')
+            ->orderBy('l.nom', 'ASC')
+            ->getQuery()
+            ->getResult();
+
+        return array_map(
+            fn (array $row) => ['id' => (int) $row['id'], 'nom' => $row['nom'], 'total' => (int) $row['total']],
+            $rows
+        );
+    }
+
+    /** @return array<int, array{id: int, nom: string, prenom: string, total: int}> Nombre de réservations par adhérent */
+    public function countByAdherent(): array
+    {
+        $rows = $this->createQueryBuilder('r')
+            ->select('a.id_adherent AS id, a.nom AS nom, a.prenom AS prenom, COUNT(r.id) as total')
+            ->join('r.adherent', 'a')
+            ->groupBy('a.id_adherent')
+            ->orderBy('a.nom', 'ASC')
+            ->getQuery()
+            ->getResult();
+
+        return array_map(
+            fn (array $row) => [
+                'id'     => (int) $row['id'],
+                'nom'    => $row['nom'],
+                'prenom' => $row['prenom'],
+                'total'  => (int) $row['total'],
+            ],
+            $rows
+        );
+    }
+
 //    /**
 //     * @return Reservations[] Returns an array of Reservations objects
 //     */
